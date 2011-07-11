@@ -4,18 +4,44 @@
 	xmlns:mx="library://ns.adobe.com/flex/mx" 
 	xmlns:local="com.pronto.internalLib.components.tree.*" 
 	xmlns:tree="com.sparkTree.*">
+	<fx:Script>
+		<![CDATA[
+			[Embed('../../../assets/disclosureOpenIcon.png')]
+            protected var disclosureOpenIcon:Class;
+            
+            [Embed('../../../assets/disclosureClosedIcon.png')]
+            protected var disclosureClosedIcon:Class;
+		
+			[Embed('../../../assets/defaultLeafIcon.png')]
+            protected var leafIcon:Class;
+            
+            [Embed('../../../assets/folderClosedIcon.png')]
+            protected var branchClosedIcon:Class;
+            
+            [Embed('../../../assets/folderOpenIcon.png')]
+            protected var branchOpenedIcon:Class;
+            
+            protected function getIcon(branch:Boolean, open:Boolean):Class {
+            	if(!branch) return leafIcon;
+            	if(open) return branchOpenedIcon;
+            	return branchClosedIcon;
+            }
+            
+            protected function getDisclosureIcon(open:Boolean):Class {
+            	return open ? disclosureOpenIcon : disclosureClosedIcon;
+            }
+        ]]>
+	</fx:Script>
 	
 	<tree:layout>
-		<s:HorizontalLayout paddingLeft="{indentation + 4}" verticalAlign="middle"
+		<s:HorizontalLayout paddingLeft="{level*17 + 4}" verticalAlign="middle"
 			paddingBottom="4" paddingTop="4"/>
 	</tree:layout>
 	
-	<tree:DefaultDisclosureButton visible="{disclosureIconVisible}" 
-		click="{toggle();}" currentState="{isOpen ? 'open' : 'closed'}"/>
+	<mx:Image id="image" source="{getDisclosureIcon(isOpen)}" visible="{isBranch}" click="{toggle();}"/>
 	
-	<s:BitmapImage source="{icon}" visible="{Boolean(icon)}"
-		includeInLayout="{Boolean(icon)}"/>
+	<s:BitmapImage source="getIcon(isBranch, isOpen)" />
 	
-	<s:Label id="labelDisplay" text="{label}" color="{textColor}"/>
+	<s:Label id="labelDisplay" text="{label}" />
 	
 </tree:TreeItemRenderer>

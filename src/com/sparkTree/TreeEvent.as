@@ -18,7 +18,9 @@ public class TreeEvent extends Event
 	
 	public static const ITEM_OPEN:String = "itemOpen";
 	
-	public static const ITEM_OPENING:String = "itemOpening";
+	public static const ITEM_OPEN_START:String = "itemOpenStart";
+	
+	public static const ITEM_CLOSE_START:String = "itemCloseStart";
 	
 	//--------------------------------------------------------------------------
 	//
@@ -27,13 +29,11 @@ public class TreeEvent extends Event
 	//--------------------------------------------------------------------------
 	
 	public function TreeEvent(type:String, bubbles:Boolean = false, 
-		cancelable:Boolean = false, item:Object = null, itemRenderer:ITreeItemRenderer = null, opening:Boolean = true)
+		cancelable:Boolean = false, item:Object = null)
 	{
 		super(type, bubbles, cancelable);
 		
 		this.item = item;
-		this.itemRenderer = itemRenderer;
-		this.opening = opening && type == ITEM_OPENING;
 	}
 	
 	//--------------------------------------------------------------------------
@@ -44,14 +44,6 @@ public class TreeEvent extends Event
 	
 	public var item:Object;
 
-	public var itemRenderer:ITreeItemRenderer;
-	
-	/**
-	 *  Used for an <code>ITEM_OPENING</code> type events only.
-	 *  Indicates whether the item is opening <code>true</code>, or closing <code>false</code>.
-	 */
-	public var opening:Boolean;
-	
 	//--------------------------------------------------------------------------
 	//
 	//  Overridden methods: Event
@@ -64,7 +56,7 @@ public class TreeEvent extends Event
 	override public function clone():Event
 	{
 		return new TreeEvent(type, bubbles, cancelable,
-			item, itemRenderer, opening);
+			item);
 	}
 }
 }

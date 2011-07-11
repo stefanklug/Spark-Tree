@@ -2,19 +2,22 @@ package com.sparkTree
 {
 import flash.events.Event;
 import flash.events.KeyboardEvent;
+import flash.geom.Point;
 import flash.ui.Keyboard;
 
 import mx.collections.IList;
-import mx.controls.treeClasses.DefaultDataDescriptor;
-import mx.controls.treeClasses.ITreeDataDescriptor2;
 import mx.core.ClassFactory;
 import mx.core.FlexGlobals;
 import mx.core.IVisualElement;
 import mx.core.mx_internal;
+import mx.core.DragSource;
 import mx.events.DragEvent;
 import mx.styles.CSSStyleDeclaration;
+import mx.managers.DragManager;
+import mx.events.CollectionEvent;
 
 import spark.components.List;
+import spark.layouts.supportClasses.DropLocation;
 
 use namespace mx_internal;
 
@@ -37,54 +40,6 @@ use namespace mx_internal;
  */
 [Event(name="itemOpening", type="com.sparkTree.TreeEvent")]
 
-//--------------------------------------
-//  Styles
-//--------------------------------------
-
-/**
- *  Specifies the icon that is displayed next to a parent item that is open so that its
- *  children are displayed.
- *
- *  The default value is the "TreeDisclosureOpen" symbol in the Assets.swf file.
- */
-[Style(name="disclosureOpenIcon", type="Class", format="EmbeddedFile", inherit="no")]
-
-/**
- *  Specifies the icon that is displayed next to a parent item that is closed so that its
- *  children are not displayed (the subtree is collapsed).
- *
- *  The default value is the "TreeDisclosureClosed" symbol in the Assets.swf file.
- */
-[Style(name="disclosureClosedIcon", type="Class", format="EmbeddedFile", inherit="no")]
-/**
- * Indentation for each tree level, in pixels. The default value is 17.
- */
-[Style(name="indentation", type="Number", inherit="no", theme="spark")]
-
-/**
- *  Specifies the folder open icon for a branch item of the tree.
- */
-[Style(name="folderOpenIcon", type="Class", format="EmbeddedFile", inherit="no")]
-
-/**
- *  Specifies the folder closed icon for a branch item of the tree.
- */
-[Style(name="folderClosedIcon", type="Class", format="EmbeddedFile", inherit="no")]
-
-/**
- *  Specifies the default icon for a leaf item.
- */
-[Style(name="defaultLeafIcon", type="Class", format="EmbeddedFile", inherit="no")]
-
-/**
- *  Color of the text when the user rolls over a row.
- */
-[Style(name="textRollOverColor", type="uint", format="Color", inherit="yes")]
-
-/**
- *  Color of the text when the user selects a row.
- */
-[Style(name="textSelectedColor", type="uint", format="Color", inherit="yes")]
 /**
  * Custom Spark Tree that is based on Spark List. Supports most of MX Tree
  * features and does not have it's bugs.
@@ -101,28 +56,6 @@ public class Tree extends List
 	public function Tree()
 	{
 		super();
-		
-		var mxTreeDeclaration:CSSStyleDeclaration = 
-			FlexGlobals.topLevelApplication.styleManager.getStyleDeclaration("mx.controls.Tree");
-		if (mxTreeDeclaration) // MX Tree may not be used in the application
-		{
-			setStyle("indentation", mxTreeDeclaration.getStyle("indentation"));
-			setStyle("disclosureOpenIcon", mxTreeDeclaration.getStyle("disclosureOpenIcon"));
-			setStyle("disclosureClosedIcon", mxTreeDeclaration.getStyle("disclosureClosedIcon"));
-			setStyle("folderOpenIcon", mxTreeDeclaration.getStyle("folderOpenIcon"));
-			setStyle("folderClosedIcon", mxTreeDeclaration.getStyle("folderClosedIcon"));
-			setStyle("defaultLeafIcon", mxTreeDeclaration.getStyle("defaultLeafIcon"));
-		}
-		else
-		{
-			setStyle("indentation", 17);
-			setStyle("disclosureOpenIcon", disclosureOpenIcon);
-			setStyle("disclosureClosedIcon", disclosureClosedIcon);
-			setStyle("folderOpenIcon", folderOpenIcon);
-			setStyle("folderClosedIcon", folderClosedIcon);
-			setStyle("defaultLeafIcon", defaultLeafIcon);
-		}
-		
 		itemRenderer = new ClassFactory(DefaultTreeItemRenderer);
 	}
 	
@@ -132,20 +65,7 @@ public class Tree extends List
 	//
 	//--------------------------------------------------------------------------
 	
-	[Embed("../../../assets/disclosureOpenIcon.png")]
-	private var disclosureOpenIcon:Class;
 	
-	[Embed("../../../assets/disclosureClosedIcon.png")]
-	private var disclosureClosedIcon:Class;
-	
-	[Embed("../../../assets/folderOpenIcon.png")]
-	private var folderOpenIcon:Class;
-	
-	[Embed("../../../assets/folderClosedIcon.png")]
-	private var folderClosedIcon:Class;
-	
-	[Embed("../../../assets/defaultLeafIcon.png")]
-	private var defaultLeafIcon:Class;
 	
 	private var refreshRenderersCalled:Boolean = false;
 	
@@ -157,193 +77,57 @@ public class Tree extends List
 	//
 	//--------------------------------------------------------------------------
 	
-	//----------------------------------
-	//  dataDescriptor
-	//----------------------------------
-
-	private var _dataDescriptor:ITreeDataDescriptor2 = new DefaultDataDescriptor();
-	
-	[Bindable("dataDescriptorChange")]
-	public function get dataDescriptor():ITreeDataDescriptor2
-	{
-		return _dataDescriptor;
-	}
-	
-	public function set dataDescriptor(value:ITreeDataDescriptor2):void
-	{
-		if (_dataDescriptor == value)
-			return;
-		
-		_dataDescriptor = value;
-		if (_dataProvider)
-		{
-			_dataProvider.dataDescriptor = _dataDescriptor;
-			refreshRenderers();
-		}
-		dispatchEvent(new Event("dataDescriptorChange"));
-	}
 	
 	//----------------------------------
 	//  dataProvider
 	//----------------------------------
 	
-	private var _dataProvider:TreeDataProvider;
+	private var _treeDataProvider:ITreeDataProvider;
+	private var _dataFlattener:ITreeDataFlattener;
 	
 	override public function get dataProvider():IList
 	{
-		return _dataProvider;
+		return _dataFlattener;
 	}
 	
 	override public function set dataProvider(value:IList):void
 	{
-		var typedValue:TreeDataProvider;
-		if (value)
+		if(!value is ITreeDataFlattener) {
+			throw new Error("The dataProvider of a Tree is handled automatically. Use treeDataProvider instead.");
+		}
+		if (_dataFlattener)
 		{
-			typedValue = value is TreeDataProvider ? TreeDataProvider(value) : new TreeDataProvider(value);
-			typedValue.dataDescriptor = dataDescriptor;
+			_dataFlattener.removeEventListener(TreeEvent.ITEM_CLOSE, dataProvider_someHandler);
+			_dataFlattener.removeEventListener(TreeEvent.ITEM_OPEN, dataProvider_someHandler);
 		}
 		
-		if (_dataProvider)
-		{
-			_dataProvider.removeEventListener(TreeEvent.ITEM_CLOSE, dataProvider_someHandler);
-			_dataProvider.removeEventListener(TreeEvent.ITEM_OPEN, dataProvider_someHandler);
-			_dataProvider.removeEventListener(TreeEvent.ITEM_OPENING, dataProvider_someHandler);
-		}
+		_dataFlattener = ITreeDataFlattener(value);
+		super.dataProvider = value;
 		
-		_dataProvider = typedValue;
-		super.dataProvider = typedValue;
-		
-		if (_dataProvider)
+		if (_dataFlattener)
 		{
-			_dataProvider.addEventListener(TreeEvent.ITEM_CLOSE, dataProvider_someHandler);
-			_dataProvider.addEventListener(TreeEvent.ITEM_OPEN, dataProvider_someHandler);
-			_dataProvider.addEventListener(TreeEvent.ITEM_OPENING, dataProvider_someHandler);
+			_dataFlattener.addEventListener(CollectionEvent.COLLECTION_CHANGE, onCollectionChange);
+			_dataFlattener.addEventListener(TreeEvent.ITEM_CLOSE, dataProvider_someHandler);
+			_dataFlattener.addEventListener(TreeEvent.ITEM_OPEN, dataProvider_someHandler);
 		}
 	}
 	
-	//----------------------------------
-	//  iconField
-	//----------------------------------
-	
-	private var _iconField:String = "icon";
-	
-	[Bindable("iconFieldChange")]
-	public function get iconField():String
-	{
-		return _iconField;
+	protected function onCollectionChange(e:CollectionEvent):void {
+		trace("collection change "+e.kind+" "+e.location +" "+e.items);
 	}
 	
-	public function set iconField(value:String):void
+	public function get treeDataProvider():ITreeDataProvider
 	{
-		if (_iconField == value)
-			return;
-		
-		_iconField = value;
-		refreshRenderers();
-		dispatchEvent(new Event("iconFieldChange"));
+		return _treeDataProvider;
 	}
 	
-	//----------------------------------
-	//  iconOpenField
-	//----------------------------------
-	
-	private var _iconOpenField:String = "icon";
-	
-	[Bindable("iconOpenFieldChange")]
-	/**
-	 * Field that will be searched for icon when showing open folder item.
-	 */
-	public function get iconOpenField():String
+	public function set treeDataProvider(value:ITreeDataProvider):void
 	{
-		return _iconOpenField;
+		_treeDataProvider = value;
+		dataProvider = new TreeDataFlattener(value);
 	}
 	
-	public function set iconOpenField(value:String):void
-	{
-		if (_iconOpenField == value)
-			return;
-		
-		_iconOpenField = value;
-		refreshRenderers();
-		dispatchEvent(new Event("iconOpenFieldChange"));
-	}
 	
-	//----------------------------------
-	//  iconFunction
-	//----------------------------------
-	
-	private var _iconFunction:Function;
-	
-	[Bindable("iconFunctionChange")]
-	/**
-	 * Icon function. Signature <code>function(item:Object, isOpen:Boolean, isBranch:Boolean):Class</code>.
-	 */
-	public function get iconFunction():Function
-	{
-		return _iconFunction;
-	}
-	
-	public function set iconFunction(value:Function):void
-	{
-		if (_iconFunction == value)
-			return;
-		
-		_iconFunction = value;
-		refreshRenderers();
-		dispatchEvent(new Event("iconFunctionChange"));
-	}
-	
-	//----------------------------------
-	//  iconsVisible
-	//----------------------------------
-	
-	private var _iconsVisible:Boolean = true;
-	
-	[Bindable("iconsVisibleChange")]
-	/**
-	 * Field that will be searched for icon when showing open folder item.
-	 */
-	public function get iconsVisible():Boolean
-	{
-		return _iconsVisible;
-	}
-	
-	public function set iconsVisible(value:Boolean):void
-	{
-		if (_iconsVisible == value)
-			return;
-		
-		_iconsVisible = value;
-		refreshRenderers();
-		dispatchEvent(new Event("iconsVisibleChange"));
-	}
-	
-	//----------------------------------
-	//  useTextColors
-	//----------------------------------
-	
-	private var _useTextColors:Boolean = true;
-	
-	[Bindable("useTextColorsChange")]
-	/**
-	 * MX components use "textRollOverColor" and "textSelectedColor" while Spark
-	 * do not. Set this property to <code>true</code> to use them in tree.
-	 */
-	public function get useTextColors():Boolean
-	{
-		return _useTextColors;
-	}
-	
-	public function set useTextColors(value:Boolean):void
-	{
-		if (_useTextColors == value)
-			return;
-		
-		_useTextColors = value;
-		refreshRenderers();
-		dispatchEvent(new Event("useTextColorsChange"));
-	}
-
 	//--------------------------------------------------------------------------
 	//
 	//  Overriden methods
@@ -352,17 +136,13 @@ public class Tree extends List
 	
 	override public function updateRenderer(renderer:IVisualElement, itemIndex:int, data:Object):void
 	{
-		itemIndex = _dataProvider.getItemIndex(data);
+		itemIndex = _dataFlattener.getItemIndex(data);
 		
 		super.updateRenderer(renderer, itemIndex, data);
 		
 		var treeItemRenderer:ITreeItemRenderer = ITreeItemRenderer(renderer);
-		treeItemRenderer.level = _dataProvider.getItemLevel(data);
-		treeItemRenderer.isBranch = true;
-		treeItemRenderer.isLeaf = false;
-		treeItemRenderer.hasChildren = dataDescriptor.hasChildren(data);
-		treeItemRenderer.isOpen = _dataProvider.isOpen(data);
-		treeItemRenderer.icon = _iconsVisible ? getIcon(data) : null;
+		treeItemRenderer.level = _dataFlattener.getItemLevel(data);
+		treeItemRenderer.isOpen = _dataFlattener.isOpen(data);
 	}
 	
 	override protected function updateDisplayList(unscaledWidth:Number, unscaledHeight:Number):void
@@ -411,13 +191,13 @@ public class Tree extends List
 		var navigationUnit:uint = mapKeycodeForLayoutDirection(event);
 		if (navigationUnit == Keyboard.LEFT)
 		{
-			if (_dataProvider.isOpen(selectedItem))
+			if (_dataFlattener.isOpen(selectedItem))
 			{
 				expandItem(selectedItem, false);
 			}
 			else
 			{
-				var parent:Object = _dataProvider.getItemParent(selectedItem);
+				var parent:Object = _dataFlattener.getItemParent(selectedItem);
 				if (parent)
 					selectedItem = parent;
 			}
@@ -434,51 +214,12 @@ public class Tree extends List
 	//
 	//--------------------------------------------------------------------------
 	
-	public function expandItem(item:Object, open:Boolean = true, cancelable:Boolean = true):void
+	public function expandItem(item:Object, open:Boolean = true):void
 	{
-		if (dataDescriptor.hasChildren(item))
-		{
-			var children:IList = IList(dataDescriptor.getChildren(item));
-			if (open)
-				_dataProvider.openBranch(children, item, cancelable);
-			else
-				_dataProvider.closeBranch(children, item, cancelable);
-		}
-	}
-	
-	public function getIcon(item:Object):Class
-	{
-		var isBranch:Boolean = dataDescriptor.isBranch(item);
-		var isOpen:Boolean = isBranch ? _dataProvider.isOpen(item) : false;
-		var icon:Class = getOwnItemIcon(item, isOpen, isBranch);
-		if (icon)
-			return icon;
-		
-		if (isBranch)
-			icon = getStyle(isOpen ? "folderOpenIcon" : "folderClosedIcon");
+		if (open)
+			_dataFlattener.openItem(item);
 		else
-			icon = getStyle("defaultLeafIcon");
-		return icon;
-	}
-	
-	public function getOwnItemIcon(item:Object, isOpen:* = null, isBranch:* = null):Class
-	{
-		if (isOpen === null)
-			isOpen = _dataProvider.isOpen(item);
-		if (isBranch === null)
-			isBranch = dataDescriptor.isBranch(item);
-		
-		var icon:Class;
-		if (!icon && _iconFunction != null)
-			icon = _iconFunction(item, isOpen, isBranch);
-		if (icon)
-			return icon;
-		
-		if (isOpen && _iconOpenField)
-			icon = item.hasOwnProperty(_iconOpenField) ? item[_iconOpenField] : null;
-		else if (!isOpen && _iconField)
-			icon = item.hasOwnProperty(_iconField) ? item[_iconField] : null;
-		return icon;
+			_dataFlattener.closeItem(item);
 	}
 	
 	public function refreshRenderers():void
@@ -500,18 +241,128 @@ public class Tree extends List
 	//--------------------------------------------------------------------------
 
 	override protected function dragDropHandler(event:DragEvent):void
-	{
-		// list does not take in account that removing an open node while drag
-		// can cause list to loose more than 1 element. When element is dropped,
-		// to big index can be specified in dataProvider.addItemAt()
-		if (_dataProvider)
-			_dataProvider.allowIncorrectIndexes = true;
-		
-		super.dragDropHandler(event);
-		
-		if (_dataProvider)
-			_dataProvider.allowIncorrectIndexes = false;
-	}
+    {
+        if (event.isDefaultPrevented())
+            return;
+        
+        // Hide the drop indicator
+        layout.hideDropIndicator();
+        destroyDropIndicator();
+        
+        // Hide focus
+        drawFocus(false);
+        drawFocusAnyway = false;
+        
+        // Get the dropLocation
+        var dropLocation:TreeDropLocation = TreeDropLocation(calculateDropLocation(event));
+        if (!dropLocation)
+            return;
+        
+        // Find the dropIndex
+        var dropIndex:int = dropLocation.dropIndex;
+        var dropParent:Object = dropLocation.dropParent;
+        
+        // Make sure the manager has the appropriate action
+        DragManager.showFeedback(event.ctrlKey ? DragManager.COPY : DragManager.MOVE);
+        
+        var dragSource:DragSource = event.dragSource;
+        var items:Vector.<Object> = dragSource.dataForFormat("itemsByIndex") as Vector.<Object>;
+
+        var caretIndex:int = -1;
+        if (dragSource.hasFormat("caretIndex"))
+            caretIndex = event.dragSource.dataForFormat("caretIndex") as int;
+        
+        // Clear the selection first to avoid extra work while adding and removing items.
+        // We will set a new selection further below in the method.
+        setSelectedIndices(new Vector.<int>(), false);
+        validateProperties(); // To commit the selection
+        
+        var newSelectedItems:Vector.<Object> = new Vector.<Object>();
+        
+        // If we are reordering the list, remove the items now,
+        // adjusting the dropIndex in the mean time.
+        // If the items are drag moved to this list from a different list,
+        // the drag initiator will remove the items when it receives the
+        // DragEvent.DRAG_COMPLETE event.
+        if (dragMoveEnabled &&
+            event.action == DragManager.MOVE &&
+            event.dragInitiator == this)
+        {
+            //convert the indices to nodes and parents as the indices will change by the move operation
+            var parentAndNode:Vector.<Object> = new Vector.<Object>();
+            
+            //ise forEach as vector.map is buggy
+            items.forEach(function(item:Object, index:int, vector:Vector.<Object>):void {
+            	parentAndNode.push({ parent: _dataFlattener.getItemParent(item), item:item });
+            });
+            
+            //move the items
+            parentAndNode.forEach(function(item:Object, index:int, vector:Vector.<Object>):void {
+            	//get the index, as it might have changed by the previous move
+            	var idx:int = treeDataProvider.getChildren(item.parent).getItemIndex(item.item);
+            	treeDataProvider.moveNode(item.parent, idx, dropParent, dropIndex);
+            	dropIndex++;
+            	newSelectedItems.push(item.item);
+            });
+        } else {
+        	//inserting items if drag copy or from other source
+        	var copyItems:Boolean = (event.action == DragManager.COPY);
+        	
+        	items.forEach(function(item:Object, index:int, vector:Vector.<Object>):void {
+        		if (copyItems)
+                	item = copyItemWithUID(item);
+                	
+            	treeDataProvider.addChildAt(dropParent, item, dropIndex);
+            	dropIndex++;
+            	newSelectedItems.push(item);
+            });
+        }
+        
+        
+        
+        // Drop the items at the dropIndex
+        var newSelection:Vector.<int> = new Vector.<int>();
+        newSelectedItems.forEach(function(item:Object, index:int, vector:Vector.<Object>):void {
+        	var idx:int = _dataFlattener.getItemIndex(item);
+        	if(idx != -1) newSelection.push(idx);
+        });
+
+        // Set the selection
+        setSelectedIndices(newSelection, false);
+
+        // Scroll the caret index in view
+        if (caretIndex != -1 && newSelection.length > 0)
+        {        	
+            // Sometimes we may need to scroll several times as for virtual layouts
+            // this is not guaranteed to bring in the element in view the first try
+            // as some items in between may not be loaded yet and their size is only
+            // estimated.
+            var delta:Point;
+            var loopCount:int = 0;
+            while (loopCount++ < 10)
+            {
+                validateNow();
+                delta = layout.getScrollPositionDeltaToElement(newSelection[0] + caretIndex);
+                if (!delta || (delta.x == 0 && delta.y == 0))
+                    break;
+                layout.horizontalScrollPosition += delta.x;
+                layout.verticalScrollPosition += delta.y;
+            }
+        }
+    }
+    
+    /**
+     * copy from spark.components.List
+     */
+    private function calculateDropLocation(event:DragEvent):DropLocation
+    {
+        // Verify data format
+        if (!enabled || !event.dragSource.hasFormat("itemsByIndex"))
+            return null;
+        
+        // Calculate the drop location
+        return layout.calculateDropLocation(event);
+    }
 	
 	//--------------------------------------------------------------------------
 	//
@@ -521,21 +372,12 @@ public class Tree extends List
 
 	private function dataProvider_someHandler(event:TreeEvent):void
 	{
-		var clonedEvent:TreeEvent = TreeEvent(event.clone());
-		if (dataGroup)
-		{
-			// find corresponding item renderer
-			var n:int = dataGroup.numElements;
-			for (var i:int = 0; i < n; i++)
-			{
-				var renderer:ITreeItemRenderer = dataGroup.getElementAt(i) as ITreeItemRenderer;
-				if (renderer && renderer.data == event.item)
-					clonedEvent.itemRenderer = renderer;
-			}
+		if (dataGroup) {
+			var idx:int = _dataFlattener.getItemIndex(event.item);
+			var renderer:ITreeItemRenderer = dataGroup.getElementAt(idx) as ITreeItemRenderer;
+			trace("refresh "+idx);
+			refreshRenderer(renderer);
 		}
-		dispatchEvent(clonedEvent);
-		if (clonedEvent.isDefaultPrevented())
-			event.preventDefault();
 	}
 	
 }
