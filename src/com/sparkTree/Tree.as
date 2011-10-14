@@ -106,14 +106,9 @@ public class Tree extends List
 		
 		if (_dataFlattener)
 		{
-			_dataFlattener.addEventListener(CollectionEvent.COLLECTION_CHANGE, onCollectionChange);
 			_dataFlattener.addEventListener(TreeEvent.ITEM_CLOSE, dataProvider_someHandler);
 			_dataFlattener.addEventListener(TreeEvent.ITEM_OPEN, dataProvider_someHandler);
 		}
-	}
-	
-	protected function onCollectionChange(e:CollectionEvent):void {
-		trace("collection change "+e.kind+" "+e.location +" "+e.items);
 	}
 	
 	public function get treeDataProvider():ITreeDataProvider
@@ -125,6 +120,10 @@ public class Tree extends List
 	{
 		_treeDataProvider = value;
 		dataProvider = new TreeDataFlattener(value);
+	}
+	
+	public function get treeDataFlattener():ITreeDataFlattener {
+		return _dataFlattener;
 	}
 	
 	
@@ -291,14 +290,14 @@ public class Tree extends List
             //convert the indices to nodes and parents as the indices will change by the move operation
             var parentAndNode:Vector.<Object> = new Vector.<Object>();
             
-            //ise forEach as vector.map is buggy
+            //use forEach as vector.map is buggy
             items.forEach(function(item:Object, index:int, vector:Vector.<Object>):void {
             	parentAndNode.push({ parent: _dataFlattener.getItemParent(item), item:item });
             });
             
             //move the items
             parentAndNode.forEach(function(item:Object, index:int, vector:Vector.<Object>):void {
-            	//get the index, as it might have changed by the previous move
+            	//get the index, as it might have changed by the previous loop iteration
             	var idx:int = treeDataProvider.getChildren(item.parent).getItemIndex(item.item);
             	treeDataProvider.moveNode(item.parent, idx, dropParent, dropIndex);
             	dropIndex++;
@@ -375,7 +374,6 @@ public class Tree extends List
 		if (dataGroup) {
 			var idx:int = _dataFlattener.getItemIndex(event.item);
 			var renderer:ITreeItemRenderer = dataGroup.getElementAt(idx) as ITreeItemRenderer;
-			trace("refresh "+idx);
 			refreshRenderer(renderer);
 		}
 	}

@@ -20,7 +20,7 @@ package com.sparkTree
     	
     	/**
     	 * removes the child from the given parent at the given index.
-    	 * parent is included as paramater
+    	 * parent is included as paramater, to remove the need for a node to know its parent.
     	 */
     	function removeChildAt(parent:Object, index:int):void
     	

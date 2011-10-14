@@ -64,6 +64,9 @@ public class TreeDataFlattener extends EventDispatcher implements ITreeDataFlatt
 	
 	protected var _rootItem:Object;
 	protected var _dataProvider:ITreeDataProvider;
+	/**
+	 * this array has size _localItems.length. Each elemnt contains a subtree, if the corresponding localItem is opened
+	 */
 	protected var _subTrees:Array;
 	protected var _localItems:IList;
 	
@@ -74,9 +77,10 @@ public class TreeDataFlattener extends EventDispatcher implements ITreeDataFlatt
 		_dataProvider = dataProvider;
 		_rootItem = rootItem;
 		
-		if(_localItems) {
+		//this is a constructor, so _localItems is always null
+		/*if(_localItems) {
 			_localItems.removeEventListener(CollectionEvent.COLLECTION_CHANGE, onLocalItemsCollectionChange);
-		}
+		}*/
 		_localItems = dataProvider.getChildren(rootItem);
 		_localItems.addEventListener(CollectionEvent.COLLECTION_CHANGE, onLocalItemsCollectionChange, false, 0, true);
 	}
@@ -291,6 +295,10 @@ public class TreeDataFlattener extends EventDispatcher implements ITreeDataFlatt
 	protected function addSubtreeAt(subtree:ITreeDataFlattener, index:int, dispatchEvt:Boolean = true):void {
 		removeSubtreeAt(index);
 		
+		//Array.splice fails, if the Array starts with a sparse part (https://bugs.adobe.com/jira/browse/ASL-277). So make sure, that the array contains the needed element
+		var fillNull:int = index - _subTrees.length;
+		while(fillNull-- > 0) _subTrees.push(null);
+		
 		_subTrees[index] = subtree;
 		
 		subtree.addEventListener(CollectionEvent.COLLECTION_CHANGE, onSubtreeCollectionChange, false, 0, true);
@@ -309,26 +317,41 @@ public class TreeDataFlattener extends EventDispatcher implements ITreeDataFlatt
 		}
 	}
 	
+	protected function printSubtrees():void {
+		var i:int;
+		var titles:Array = new Array();
+		for(i=0;i<_subTrees.length;i++) {
+			if(_subTrees[i]) {
+				titles.push("x"+_subTrees[i]._rootItem.category.title);
+			} else {
+				titles.push("null");
+			}
+		}
+		
+		trace("subtree: "+titles.join(", "));
+	}
+	
 	protected function removeSubtreeAt(index:int, dispatchEvt:Boolean = true):ITreeDataFlattener {
 		var subtree:ITreeDataFlattener = getSubtree(index);
-		if(!subtree) return null;
-		
-		_subTrees[index] = null;
-		
-		subtree.removeEventListener(CollectionEvent.COLLECTION_CHANGE, onSubtreeCollectionChange);
-		subtree.removeEventListener(TreeEvent.ITEM_OPEN, onSubtreeTreeEvent);
-		subtree.removeEventListener(TreeEvent.ITEM_CLOSE, onSubtreeTreeEvent);
-		
-		if(dispatchEvt) {
-			var e:CollectionEvent = new CollectionEvent(CollectionEvent.COLLECTION_CHANGE,
-														false,
-														false,
-														CollectionEventKind.REMOVE,
-														getSubtreeStartIndex(index),
-														-1,
-														subtree.toArray());
-			dispatchEvent(e);
+		if(subtree) {
+			_subTrees[index] = null;
+			
+			subtree.removeEventListener(CollectionEvent.COLLECTION_CHANGE, onSubtreeCollectionChange);
+			subtree.removeEventListener(TreeEvent.ITEM_OPEN, onSubtreeTreeEvent);
+			subtree.removeEventListener(TreeEvent.ITEM_CLOSE, onSubtreeTreeEvent);
+			
+			if(dispatchEvt) {
+				var e:CollectionEvent = new CollectionEvent(CollectionEvent.COLLECTION_CHANGE,
+															false,
+															false,
+															CollectionEventKind.REMOVE,
+															getSubtreeStartIndex(index),
+															-1,
+															subtree.toArray());
+				dispatchEvent(e);
+			}
 		}
+		
 		return subtree;
 	}
 	
@@ -339,12 +362,22 @@ public class TreeDataFlattener extends EventDispatcher implements ITreeDataFlatt
 		_subTrees = new Array();
 	}
 	
+	/* returns the virtual index, of the item with the given local index 
+	 * 
+	 * Name | localIndex | virtualIndex
+	 * A		0			0
+	 *   a.a    -			1
+	 *   a.b    -           2
+	 * B        1           3
+	 *   b.a    -           4
+	 * 
+	 */
 	protected function getVirtualIndex(localIndex:int):int {
 		var index:int;
 		var result:int = 0;
 		//add all preceding items
 		for(index=0; index < localIndex; index++) {
-			//the item
+			//the local item
 			result++;
 			var subtree:ITreeDataFlattener = getSubtree(index);
 			if(subtree) {
@@ -521,37 +554,45 @@ public class TreeDataFlattener extends EventDispatcher implements ITreeDataFlatt
 	
 	public function getItemLevel(item:Object):int
 	{
-		var localIndex:int = _localItems.getItemIndex(item);
-		if(localIndex > -1) {
-			return 0;
-		}
-		
-		for each(var subtree:Object in _subTrees) {
-			if(!subtree) continue;
-			
-			var res:int = ITreeDataFlattener(subtree).getItemLevel(item);
-			if(res > -1) return res+1;
-		}
+		var path:Array = getItemPath(item);
+		if(path) return path.length - 1;
 		
 		return -1;
 	}
 	
 	public function getItemParent(item:Object):Object
 	{
-		if(item == null) return null;
-		var localIndex:int = _localItems.getItemIndex(item);
-		if(localIndex > -1) {
+		var path:Array = getItemPath(item);
+		if(path) {
+			if(path.length > 1) return path[path.length-2];
+			//if the item is a direct descendant of this flattener, the _rootItem is the parent
 			return _rootItem;
-		}
-		
-		for each(var subtree:Object in _subTrees) {
-			if(!subtree) continue;
-			
-			var res:Object = ITreeDataFlattener(subtree).getItemParent(item);
-			if(res != null) return res;
 		}
 		
 		return null;
 	}
+	
+	/**
+	 * returns the path to the given item as Array of items.
+	 * The item itself is included
+	 */
+	public function getItemPath(item:Object):Array {
+		if(item == null) return null;
+		
+		var localIndex:int = _localItems.getItemIndex(item);
+		if(localIndex > -1) {
+			return [item];
+		}
+		
+		for each(var subtree:ITreeDataFlattener in _subTrees) {
+			if(!subtree) continue;
+			
+			var res:Object = TreeDataFlattener(subtree).getItemPath(item);
+			if(res != null) return [TreeDataFlattener(subtree)._rootItem].concat(res);
+		}
+		
+		return null;
+	}
+	
 }
 }

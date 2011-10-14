@@ -41,7 +41,7 @@ public class TreeItemRenderer extends ItemRenderer implements ITreeItemRenderer
 	//
 	//--------------------------------------------------------------------------
 	
-	private var tree:Tree;
+	private var _tree:Tree;
 	
 	//--------------------------------------------------------------------------
 	//
@@ -74,6 +74,13 @@ public class TreeItemRenderer extends ItemRenderer implements ITreeItemRenderer
 		
 		_level = value;
 		dispatchEvent(new Event("levelChange"));
+	}
+	
+	/**
+	 * convenience function to get the owner
+	 */
+	public function get tree():Tree {
+		return _tree;
 	}
 	
 
@@ -156,7 +163,7 @@ public class TreeItemRenderer extends ItemRenderer implements ITreeItemRenderer
 		{
 			container = container.parent;
 		}
-		tree = Tree(container);
+		_tree = Tree(container);
 		updateIsBranch();
 	}
 	
