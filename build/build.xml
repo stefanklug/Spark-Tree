@@ -20,6 +20,7 @@
 		<compc output="${build.dir}/${swc.name}">
 			<source-path path-element="${source.dir}" />
 			<source-path path-element="${assets.dir}" />
+			<namespace uri="http://ns.sparkTree.com/tree" manifest="${source.dir}/manifest.xml" />
 			<include-sources dir="${source.dir}">
 				<include name="**/*.as" />
 				<include name="**/*.mxml" />
