@@ -8,6 +8,8 @@ package com.sparkTree
      */
     public interface ITreeDataProvider
     {
+		function getRoot():Object;
+		
     	/*
     	 * return true if the node is a Branch (can be opened)
     	 */

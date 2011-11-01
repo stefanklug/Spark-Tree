@@ -119,7 +119,11 @@ public class Tree extends List
 	public function set treeDataProvider(value:ITreeDataProvider):void
 	{
 		_treeDataProvider = value;
-		dataProvider = new TreeDataFlattener(value);
+		if(value) {
+			dataProvider = new TreeDataFlattener(value);
+		} else {
+			dataProvider = null;
+		}
 	}
 	
 	public function get treeDataFlattener():ITreeDataFlattener {
@@ -197,7 +201,7 @@ public class Tree extends List
 			else
 			{
 				var parent:Object = _dataFlattener.getItemParent(selectedItem);
-				if (parent)
+				if (parent != treeDataProvider.getRoot())
 					selectedItem = parent;
 			}
 		}

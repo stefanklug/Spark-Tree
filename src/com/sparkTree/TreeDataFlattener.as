@@ -75,12 +75,11 @@ public class TreeDataFlattener extends EventDispatcher implements ITreeDataFlatt
 	{
 		_subTrees = new Array();
 		_dataProvider = dataProvider;
+		
+		if(!rootItem) rootItem = dataProvider.getRoot();
+		
 		_rootItem = rootItem;
 		
-		//this is a constructor, so _localItems is always null
-		/*if(_localItems) {
-			_localItems.removeEventListener(CollectionEvent.COLLECTION_CHANGE, onLocalItemsCollectionChange);
-		}*/
 		_localItems = dataProvider.getChildren(rootItem);
 		_localItems.addEventListener(CollectionEvent.COLLECTION_CHANGE, onLocalItemsCollectionChange, false, 0, true);
 	}
