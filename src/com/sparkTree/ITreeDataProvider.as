@@ -14,7 +14,7 @@ package com.sparkTree
     	function isBranch(node:Object):Boolean;
     	
     	/*
-    	 * return the list of childrens for the given node
+    	 * return the list of childrens for the given node. This must always return the same list for a given node.
     	 */
     	function getChildren(node:Object):IList;
     	

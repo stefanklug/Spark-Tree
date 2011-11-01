@@ -79,8 +79,20 @@ public class TreeItemRenderer extends ItemRenderer implements ITreeItemRenderer
 	/**
 	 * convenience function to get the owner
 	 */
+	[Bindable("treeChange")]
 	public function get tree():Tree {
 		return _tree;
+	}
+	
+	/**
+	 * convenience function to get the owner
+	 */
+	public function set tree(t:Tree):void {
+		if (_tree == t)
+			return;
+		
+		_tree = t;
+		dispatchEvent(new Event("treeChange"));
 	}
 	
 
@@ -163,20 +175,27 @@ public class TreeItemRenderer extends ItemRenderer implements ITreeItemRenderer
 		{
 			container = container.parent;
 		}
-		_tree = Tree(container);
-		updateIsBranch();
+		tree = Tree(container);
+		callPostInitialize();
 	}
 	
 	override public function set data(v:Object):void {
 		super.data = v;
-		updateIsBranch();
+		callPostInitialize();
 	}
 	
-	protected function updateIsBranch():void {
+	/*
+	 * this gets called as soon as tree and data is valid
+	 */
+	protected function postInitialize():void {
+		isBranch = tree.treeDataProvider.isBranch(data);
+	}
+	
+	protected function callPostInitialize():void {
 		if(!tree) return;
 		if(!data) return;
 		
-		isBranch = tree.treeDataProvider.isBranch(data);
+		postInitialize();
 	}
 }
 }

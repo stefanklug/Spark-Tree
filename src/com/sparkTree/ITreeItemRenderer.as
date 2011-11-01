@@ -11,6 +11,9 @@ public interface ITreeItemRenderer extends IItemRenderer
 	function get level():int;
 	function set level(value:int):void;
 	
+	function get isBranch():Boolean;
+	function set isBranch(v:Boolean):void;
+	
 	function get isOpen():Boolean;
 	function set isOpen(value:Boolean):void;
 }
