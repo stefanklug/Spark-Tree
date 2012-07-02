@@ -17,7 +17,9 @@
 	</target>
 
 	<target name="compile" depends="init" description="Compiles SWC into build directory">
-		<compc output="${build.dir}/${swc.name}">
+		<compc output="${build.dir}/${swc.name}"
+			fork="true"
+			dir="${basedir}">
 			<source-path path-element="${source.dir}" />
 			<source-path path-element="${assets.dir}" />
 			<namespace uri="http://ns.sparkTree.com/tree" manifest="${source.dir}/manifest.xml" />
